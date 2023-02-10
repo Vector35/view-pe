@@ -1505,7 +1505,7 @@ bool PEView::Init()
 				try
 				{
 					// TODO: I'm pretty sure we're going to have to change this
-					// when we deail with relocations properly
+					// when we deal with relocations properly
 					// TODO TLS entries need to be verified for rebasing operations
 					reader.Seek(RVAToFileOffset(tlsEntry.addressOfCallBacks - m_peImageBase));
 					while (true)
