@@ -1506,7 +1506,6 @@ bool PEView::Init()
 				{
 					// TODO: I'm pretty sure we're going to have to change this
 					// when we deal with relocations properly
-					// TODO TLS entries need to be verified for rebasing operations
 					reader.Seek(RVAToFileOffset(tlsEntry.addressOfCallBacks - m_peImageBase));
 					while (true)
 					{
@@ -1518,6 +1517,9 @@ bool PEView::Init()
 						if (address == 0)
 							break;
 
+						// This address is a VA, we must handle the relocation by ourselves
+						address += (m_imageBase - m_peImageBase);
+
 						char name[64];
 						snprintf(name, sizeof(name), "_TLS_Entry_%x", i++);
 						if (m_arch)
@@ -1526,7 +1528,7 @@ bool PEView::Init()
 							{
 								m_logger->LogInfo("Found TLS entrypoint %s: 0x%" PRIx64, name, address);
 								Ref<Platform> assPlatform = platform->GetAssociatedPlatformByAddress(address);
-								AddPESymbol(FunctionSymbol, "", name, address - m_peImageBase);
+								AddPESymbol(FunctionSymbol, "", name, address - m_imageBase);
 							}
 							else
 								m_logger->LogInfo("Found TLS entrypoint %s: 0x%" PRIx64 " however it is not backed by file!",
@@ -1837,6 +1839,10 @@ bool PEView::Init()
 			size_t securityCookieOffset = m_is64 ? 88 : 60;
 			reader.Seek(RVAToFileOffset(m_dataDirs[IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG].virtualAddress + securityCookieOffset));
 			auto securityCookieAddress = m_is64 ? reader.Read64() : reader.Read32();
+			// The securityCookieAddress reported by the file is a VA, which does not account for rebase. We must
+			// calculate the rebased value for it.
+			securityCookieAddress += (m_imageBase - m_peImageBase);
+			m_logger->LogDebug("securityCookieAddress: 0x%" PRIx64, securityCookieAddress);
 			DefineDataVariable(securityCookieAddress, Type::IntegerType(m_is64 ? 8 : 4, false));
 			DefineAutoSymbol(new Symbol(DataSymbol, "__security_cookie", securityCookieAddress, NoBinding));
 
@@ -1844,6 +1850,8 @@ bool PEView::Init()
 			size_t seHandlerTableTableOffset = m_is64 ? 96 : 64;
 			reader.Seek(RVAToFileOffset(m_dataDirs[IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG].virtualAddress + seHandlerTableTableOffset));
 			uint64_t seHandlerTable = m_is64 ? reader.Read64() : reader.Read32();
+			seHandlerTable += (m_imageBase - m_peImageBase);
+			m_logger->LogDebug("seHandlerTable: 0x%" PRIx64, seHandlerTable);
 			uint64_t seHandlerCount = m_is64 ? reader.Read64() : reader.Read32();
 			if (seHandlerTable && seHandlerCount)
 			{
@@ -1855,7 +1863,7 @@ bool PEView::Init()
 					processSehTable = settings->Get<bool>("loader.pe.processSehTable", this);
 				if (processSehTable)
 				{
-					reader.Seek(RVAToFileOffset(seHandlerTable - m_peImageBase));
+					reader.Seek(RVAToFileOffset(seHandlerTable - m_imageBase));
 					for (size_t i = 0; i < seHandlerCount; i++)
 					{
 						uint64_t sehEntry = m_imageBase + reader.Read32();
@@ -1874,7 +1882,11 @@ bool PEView::Init()
 				reader.Seek(RVAToFileOffset(m_dataDirs[IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG].virtualAddress + cfgFields));
 
 				uint64_t guardCFCheckFunctionPointer = m_is64 ? reader.Read64() : reader.Read32();
+				guardCFCheckFunctionPointer += (m_imageBase - m_peImageBase);
+				m_logger->LogDebug("guardCFCheckFunctionPointer: 0x%" PRIx64, guardCFCheckFunctionPointer);
 				uint64_t guardCFDispatchFunctionPointer = m_is64 ? reader.Read64() : reader.Read32();
+				guardCFDispatchFunctionPointer += (m_imageBase - m_peImageBase);
+				m_logger->LogDebug("guardCFDispatchFunctionPointer: 0x%" PRIx64, guardCFDispatchFunctionPointer);
 				uint64_t guardCFFunctionTable = m_is64 ? reader.Read64() : reader.Read32();
 				uint64_t guardCFFunctionCount = m_is64 ? reader.Read64() : reader.Read32();
 				uint32_t guardFlags = reader.Read32();
@@ -1884,9 +1896,9 @@ bool PEView::Init()
 				DefineDataVariable(guardCFDispatchFunctionPointer, Type::PointerType(platform->GetArchitecture(), Type::VoidType()));
 				DefineAutoSymbol(new Symbol(DataSymbol, "__guard_dispatch_icall_fptr", guardCFDispatchFunctionPointer, NoBinding));
 
-				reader.Seek(RVAToFileOffset(guardCFCheckFunctionPointer - m_peImageBase));
+				reader.Seek(RVAToFileOffset(guardCFCheckFunctionPointer - m_imageBase));
 				uint64_t guardCFCheckFunction = m_is64 ? reader.Read64() : reader.Read32();
-				reader.Seek(RVAToFileOffset(guardCFDispatchFunctionPointer - m_peImageBase));
+				reader.Seek(RVAToFileOffset(guardCFDispatchFunctionPointer - m_imageBase));
 				uint64_t guardCFDispatchFunction = m_is64 ? reader.Read64() : reader.Read32();
 
 				Ref<Platform> targetPlatform = platform->GetAssociatedPlatformByAddress(guardCFCheckFunction);
@@ -2260,6 +2272,7 @@ uint64_t PEView::Read64(uint64_t rva)
 }
 
 
+// The addr is RVA
 void PEView::AddPESymbol(BNSymbolType type, const string& dll, const string& name, uint64_t addr,
 		BNSymbolBinding binding, uint64_t ordinal, TypeLibrary* lib)
 {
