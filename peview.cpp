@@ -1878,7 +1878,7 @@ bool PEView::Init()
 			// parse CFG table
 			if ((loadConfigSize >= (uint32_t)(m_is64 ? 0x94 : 0x40)) && (m_is64 || (opt.dllCharacteristics & IMAGE_DLLCHARACTERISTICS_GUARD_CF)))
 			{
-				size_t cfgFields = m_is64 ? 112 : 68;
+				size_t cfgFields = m_is64 ? 112 : 72;
 				reader.Seek(RVAToFileOffset(m_dataDirs[IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG].virtualAddress + cfgFields));
 
 				uint64_t guardCFCheckFunctionPointer = m_is64 ? reader.Read64() : reader.Read32();
