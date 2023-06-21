@@ -1430,6 +1430,10 @@ bool PEView::Init()
 
 				// Read name of imported DLL, and trim extension for creating symbol name
 				entry.name = ReadString(entry.nameAddress);
+				if (!GetExternalLibraryByName(entry.name))
+				{
+					AddExternalLibrary(entry.name, nullptr);
+				}
 				libraries.push_back(new Metadata(string(entry.name)));
 				string lowerName = entry.name;
 				std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(),
