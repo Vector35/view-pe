@@ -910,6 +910,7 @@ bool PEView::Init()
 		return false;
 	}
 
+	vector<pair<BNRelocationInfo, string>> relocs;
 	BeginBulkModifySymbols();
 	m_symbolQueue = new SymbolQueue();
 
@@ -1173,7 +1174,16 @@ bool PEView::Init()
 					}
 					m_logger->LogDebug("FuncString: %s\n", func.c_str());
 					AddPESymbol(ImportAddressSymbol, dllName, func, iatOffset, NoBinding, ordinal, typeLib);
-
+					AddPESymbol(ExternalSymbol, dllName, func, 0, NoBinding, ordinal, typeLib);
+					BNRelocationInfo reloc;
+					memset(&reloc, 0, sizeof(reloc));
+					reloc.nativeType = -1;
+					reloc.address = m_imageBase + iatOffset;
+					reloc.size = m_is64 ? 8 : 4;
+					reloc.pcRelative = false;
+					reloc.base = m_imageBase - m_peImageBase;
+					reloc.external = true;
+					relocs.push_back({reloc, func});
 					entryOffset += m_is64 ? 8 : 4;
 					iatOffset += m_is64 ? 8 : 4;
 				}
@@ -1712,7 +1722,16 @@ bool PEView::Init()
 					}
 					m_logger->LogDebug("FuncString: %s\n", func.c_str());
 					AddPESymbol(ImportAddressSymbol, dllName, func, iatOffset, NoBinding, ordinal, typeLib);
-
+					AddPESymbol(ExternalSymbol, dllName, func, 0, NoBinding, ordinal, typeLib);
+					BNRelocationInfo reloc;
+					memset(&reloc, 0, sizeof(reloc));
+					reloc.nativeType = -1;
+					reloc.address = m_imageBase + iatOffset;
+					reloc.size = m_is64 ? 8 : 4;
+					reloc.pcRelative = false;
+					reloc.base = m_imageBase - m_peImageBase;
+					reloc.external = true;
+					relocs.push_back({reloc, func});
 					entryOffset += m_is64 ? 8 : 4;
 					iatOffset += m_is64 ? 8 : 4;
 				}
@@ -2177,6 +2196,13 @@ bool PEView::Init()
 	{
 		m_logger->LogWarn("Failed to parse relocation directory: %s\n", e.what());
 	}
+
+	for (auto& [reloc, name] : relocs)
+	{
+		if (auto symbol = GetSymbolByRawName(name, GetExternalNameSpace()); symbol)
+			DefineRelocation(m_arch, reloc, symbol, reloc.address);
+	}
+
 	// Add a symbol for the entry point
 	if (m_entryPoint)
 		DefineAutoSymbol(new Symbol(FunctionSymbol, "_start", m_imageBase + m_entryPoint));
@@ -2285,17 +2311,20 @@ void PEView::AddPESymbol(BNSymbolType type, const string& dll, const string& nam
 		return;
 
 	// Ensure symbol is within the executable
-	bool ok = false;
-	for (auto& i : m_sections)
+	if (type != ExternalSymbol)
 	{
-		if ((addr >= i.virtualAddress) && (addr < (i.virtualAddress + i.virtualSize)))
+		bool ok = false;
+		for (auto& i : m_sections)
 		{
-			ok = true;
-			break;
+			if ((addr >= i.virtualAddress) && (addr < (i.virtualAddress + i.virtualSize)))
+			{
+				ok = true;
+				break;
+			}
 		}
+		if (!ok)
+			return;
 	}
-	if (!ok)
-		return;
 
 	Ref<Type> symbolTypeRef;
 
@@ -2356,8 +2385,12 @@ void PEView::AddPESymbol(BNSymbolType type, const string& dll, const string& nam
 				}
 			}
 
+			NameSpace ns(dll);
+			if (type == ExternalSymbol)
+				ns = GetExternalNameSpace();
+
 			return pair<Ref<Symbol>, Ref<Type>>(
-				new Symbol(type, shortName, fullName, rawName, m_imageBase + addr, binding, NameSpace(dll), ordinal),
+				new Symbol(type, shortName, fullName, rawName, m_imageBase + addr, binding, ns, ordinal),
 				typeRef);
 		},
 		[this](Symbol* symbol, Type* type) {
