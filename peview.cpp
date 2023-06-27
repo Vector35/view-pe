@@ -1430,9 +1430,9 @@ bool PEView::Init()
 
 				// Read name of imported DLL, and trim extension for creating symbol name
 				entry.name = ReadString(entry.nameAddress);
-				if (!GetExternalLibraryByName(entry.name))
+				if (!GetExternalLibrary(entry.name))
 				{
-					AddExternalLibrary(entry.name, nullptr);
+					AddExternalLibrary(entry.name, {}, true);
 				}
 				libraries.push_back(new Metadata(string(entry.name)));
 				string lowerName = entry.name;
