@@ -1910,23 +1910,28 @@ bool PEView::Init()
 				uint64_t guardCFFunctionCount = m_is64 ? reader.Read64() : reader.Read32();
 				uint32_t guardFlags = reader.Read32();
 
-				DefineDataVariable(guardCFCheckFunctionPointer, Type::PointerType(platform->GetArchitecture(), Type::VoidType()));
-				DefineAutoSymbol(new Symbol(DataSymbol, "__guard_check_icall_fptr", guardCFCheckFunctionPointer, NoBinding));
-				DefineDataVariable(guardCFDispatchFunctionPointer, Type::PointerType(platform->GetArchitecture(), Type::VoidType()));
-				DefineAutoSymbol(new Symbol(DataSymbol, "__guard_dispatch_icall_fptr", guardCFDispatchFunctionPointer, NoBinding));
-
 				reader.Seek(RVAToFileOffset(guardCFCheckFunctionPointer - m_imageBase));
 				uint64_t guardCFCheckFunction = m_is64 ? reader.Read64() : reader.Read32();
 				reader.Seek(RVAToFileOffset(guardCFDispatchFunctionPointer - m_imageBase));
 				uint64_t guardCFDispatchFunction = m_is64 ? reader.Read64() : reader.Read32();
 
-				Ref<Platform> targetPlatform = platform->GetAssociatedPlatformByAddress(guardCFCheckFunction);
-				AddFunctionForAnalysis(targetPlatform, guardCFCheckFunction);
-				DefineAutoSymbol(new Symbol(FunctionSymbol, "_guard_check_icall", guardCFCheckFunction, NoBinding));
+				auto functionPointer = Type::PointerType(platform->GetArchitecture(), Type::FunctionType(Type::VoidType(), platform->GetDefaultCallingConvention(), {}));
+				auto guardCFCheckFunctionType = Type::FunctionType(Type::VoidType(),
+					platform->GetDefaultCallingConvention(),
+					{
+						FunctionParameter("", functionPointer)
+					});
+				auto pointerGuardCFCheckFunctionType = Type::PointerType(platform->GetArchitecture(), guardCFCheckFunctionType);
 
-				targetPlatform = platform->GetAssociatedPlatformByAddress(guardCFDispatchFunction);
-				AddFunctionForAnalysis(targetPlatform, guardCFDispatchFunction);
-				DefineAutoSymbol(new Symbol(FunctionSymbol, "_guard_dispatch_icall_nop", guardCFDispatchFunction, NoBinding));
+				auto guardCFCheckPointerSymbol = new Symbol(DataSymbol, "__guard_check_icall_fptr", guardCFCheckFunctionPointer, NoBinding);
+				auto guardCFCheckSymbol = new Symbol(FunctionSymbol, "_guard_check_icall", guardCFCheckFunction, NoBinding);
+				LogError("Making function at %llx", guardCFCheckFunction);
+				auto guardCFCheckDispatchSymbol = new Symbol(DataSymbol, "__guard_dispatch_icall_fptr", guardCFDispatchFunctionPointer, NoBinding);
+				auto guardCFDispatchSymbol = new Symbol(FunctionSymbol, "_guard_dispatch_icall_nop", guardCFDispatchFunction, NoBinding);
+				DefineAutoSymbolAndVariableOrFunction(GetDefaultPlatform(), guardCFCheckPointerSymbol, pointerGuardCFCheckFunctionType);
+				DefineAutoSymbolAndVariableOrFunction(GetDefaultPlatform(), guardCFCheckSymbol, guardCFCheckFunctionType);
+				DefineAutoSymbolAndVariableOrFunction(GetDefaultPlatform(), guardCFCheckDispatchSymbol, pointerGuardCFCheckFunctionType);
+				DefineAutoSymbolAndVariableOrFunction(GetDefaultPlatform(), guardCFDispatchSymbol, guardCFCheckFunctionType);
 
 				if (guardFlags & IMAGE_GUARD_CF_FUNCTION_TABLE_PRESENT)
 				{
