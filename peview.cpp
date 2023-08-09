@@ -27,6 +27,342 @@ void BinaryNinja::InitPEViewType()
 	g_peViewType = &type;
 }
 
+// String representation of Rich header object types
+static const string kProdId_C = "[ C ]";
+static const string kProdId_CPP = "[C++]";
+static const string kProdId_RES = "[RES]";
+static const string kProdId_IMP = "[IMP]";
+static const string kProdId_EXP = "[EXP]";
+static const string kProdId_ASM = "[ASM]";
+static const string kProdId_LNK = "[LNK]";
+static const string kProdId_UNK = "[ ? ]";
+
+static const std::map<uint16_t, string> ProductIdMap = {
+	{0x0000, kProdId_UNK},
+	{0x0002, kProdId_IMP},
+	{0x0004, kProdId_LNK},
+	{0x0006, kProdId_RES},
+	{0x000A, kProdId_C},
+	{0x000B, kProdId_CPP},
+	{0x000F, kProdId_ASM},
+	{0x0015, kProdId_C},
+	{0x0016, kProdId_CPP},
+	{0x0019, kProdId_IMP},
+	{0x001C, kProdId_C},
+	{0x001D, kProdId_CPP},
+	{0x003D, kProdId_LNK},
+	{0x003F, kProdId_EXP},
+	{0x0040, kProdId_ASM},
+	{0x0045, kProdId_RES},
+	{0x005A, kProdId_LNK},
+	{0x005C, kProdId_EXP},
+	{0x005D, kProdId_IMP},
+	{0x005E, kProdId_RES},
+	{0x005F, kProdId_C},
+	{0x0060, kProdId_CPP},
+	{0x006D, kProdId_C},
+	{0x006E, kProdId_CPP},
+	{0x0078, kProdId_LNK},
+	{0x007A, kProdId_EXP},
+	{0x007B, kProdId_IMP},
+	{0x007C, kProdId_RES},
+	{0x007D, kProdId_ASM},
+	{0x0083, kProdId_C},
+	{0x0084, kProdId_CPP},
+	{0x0091, kProdId_LNK},
+	{0x0092, kProdId_EXP},
+	{0x0093, kProdId_IMP},
+	{0x0094, kProdId_RES},
+	{0x0095, kProdId_ASM},
+	{0x009A, kProdId_RES},
+	{0x009B, kProdId_EXP},
+	{0x009C, kProdId_IMP},
+	{0x009D, kProdId_LNK},
+	{0x009E, kProdId_ASM},
+	{0x00AA, kProdId_C},
+	{0x00AB, kProdId_CPP},
+	{0x00C9, kProdId_RES},
+	{0x00CA, kProdId_EXP},
+	{0x00CB, kProdId_IMP},
+	{0x00CC, kProdId_LNK},
+	{0x00CD, kProdId_ASM},
+	{0x00CE, kProdId_C},
+	{0x00CF, kProdId_CPP},
+	{0x00DB, kProdId_RES},
+	{0x00DC, kProdId_EXP},
+	{0x00DD, kProdId_IMP},
+	{0x00DE, kProdId_LNK},
+	{0x00DF, kProdId_ASM},
+	{0x00E0, kProdId_C},
+	{0x00E1, kProdId_CPP},
+	{0x00FF, kProdId_RES},
+	{0x0100, kProdId_EXP},
+	{0x0101, kProdId_IMP},
+	{0x0102, kProdId_LNK},
+	{0x0103, kProdId_ASM},
+	{0x0104, kProdId_C},
+	{0x0105, kProdId_CPP}
+};
+
+
+// Mapping of Rich header build number to version strings
+static const std::map<uint16_t, const string> ProductMap = {
+	// Source: https://github.com/dishather/richprint/blob/master/comp_id.txt
+	{0x0000, "Imported Functions"},
+	{0x0684, "VS97 v5.0 SP3 cvtres 5.00.1668"},
+	{0x06B8, "VS98 v6.0 cvtres build 1720"},
+	{0x06C8, "VS98 v6.0 SP6 cvtres build 1736"},
+	{0x1C87, "VS97 v5.0 SP3 link 5.10.7303"},
+	{0x5E92, "VS2015 v14.0 UPD3 build 24210"},
+	{0x5E95, "VS2015 UPD3 build 24213"},
+
+	// http://bytepointer.com/articles/the_microsoft_rich_header.htm
+	{0x0BEC, "VS2003 v7.1 Free Toolkit .NET build 3052"},
+	{0x0C05, "VS2003 v7.1 .NET build 3077"},
+	{0x0FC3, "VS2003 v7.1 | Windows Server 2003 SP1 DDK build 4035"},
+	{0x1C83, "MASM 6.13.7299"},
+	{0x178E, "VS2003 v7.1 SP1 .NET build 6030"},
+	{0x1FE8, "VS98 v6.0 RTM/SP1/SP2 build 8168"},
+	{0x1FE9, "VB 6.0/SP1/SP2 build 8169"},
+	{0x20FC, "MASM 6.14.8444"},
+	{0x20FF, "VC++ 6.0 SP3 build 8447"},
+	{0x212F, "VB 6.0 SP3 build 8495"},
+	{0x225F, "VS 6.0 SP4 build 8799"},
+	{0x2263, "MASM 6.15.8803"},
+	{0x22AD, "VB 6.0 SP4 build 8877"},
+	{0x2304, "VB 6.0 SP5 build 8964"},
+	{0x2306, "VS 6.0 SP5 build 8966"},
+	//  {0x2346, "MASM 6.15.9030 (VS.NET 7.0 BETA 1)"},
+	{0x2346, "VS 7.0 2000 Beta 1 build 9030"},
+	{0x2354, "VS 6.0 SP5 Processor Pack build 9044"},
+	{0x2426, "VS2001 v7.0 Beta 2 build 9254"},
+	{0x24FA, "VS2002 v7.0 .NET build 9466"},
+	{0x2636, "VB 6.0 SP6 / VC++ build 9782"},
+	{0x26E3, "VS2002 v7.0 SP1 build 9955"},
+	{0x520D, "VS2013 v12.[0,1] build 21005"},
+	{0x521E, "VS2008 v9.0 build 21022"},
+	{0x56C7, "VS2015 v14.0 build 22215"},
+	{0x59F2, "VS2015 v14.0 build 23026"},
+	{0x5BD2, "VS2015 v14.0 UPD1 build 23506"},
+	{0x5D10, "VS2015 v14.0 UPD2 build 23824"},
+	{0x5E97, "VS2015 v14.0 UPD3.1 build 24215"},
+	{0x7725, "VS2013 v12.0 UPD2 build 30501"},
+	{0x766F, "VS2010 v10.0 build 30319"},
+	{0x7809, "VS2008 v9.0 SP1 build 30729"},
+	{0x797D, "VS2013 v12.0 UPD4 build 31101"},
+	{0x9D1B, "VS2010 v10.0 SP1 build 40219"},
+	{0x9EB5, "VS2013 v12.0 UPD5 build 40629"},
+	{0xC497, "VS2005 v8.0 (Beta) build 50327"},
+	{0xC627, "VS2005 v8.0 | VS2012 v11.0 build 50727"},
+	{0xC751, "VS2012 v11.0 Nov CTP build 51025"},
+	{0xC7A2, "VS2012 v11.0 UPD1 build 51106"},
+	{0xEB9B, "VS2012 v11.0 UPD2 build 60315"},
+	{0xECC2, "VS2012 v11.0 UPD3 build 60610"},
+	{0xEE66, "VS2012 v11.0 UPD4 build 61030"},
+	{0x5E9A, "VS2015 v14.0 build 24218"},
+	{0x61BB, "VS2017 v14.1 build 25019"},
+
+	// https://dev.to/yumetodo/list-of-mscver-and-mscfullver-8nd
+	{0x2264, "VS 6 [SP5,SP6] build 8804"},
+	{0x23D8, "Windows XP SP1 DDK"},
+	{0x0883, "Windows Server 2003 DDK"},
+	{0x08F4, "VS2003 v7.1 .NET Beta build 2292"},
+	{0x9D76, "Windows Server 2003 SP1 DDK (for AMD64)"},
+	{0x9E9F, "VS2005 v8.0 Beta 1 build 40607"},
+	{0xC427, "VS2005 v8.0 Beta 2 build 50215"},
+	{0xC490, "VS2005 v8.0 build 50320"},
+	{0x50E2, "VS2008 v9.0 Beta 2 build 20706"},
+	{0x501A, "VS2010 v10.0 Beta 1 build 20506"},
+	{0x520B, "VS2010 v10.0 Beta 2 build 21003"},
+	{0x5089, "VS2013 v12.0 Preview build 20617"},
+	{0x515B, "VS2013 v12.0 RC build 20827"},
+	{0x527A, "VS2013 v12.0 Nov CTP build 21114"},
+	{0x7674, "VS2013 v12.0 UPD2 RC build 30324"},
+	{0x63A3, "VS2017 v15.3.3 build 25507"},
+	{0x63C6, "VS2017 v15.4.4 build 25542"},
+	{0x63CB, "VS2017 v15.4.5 build 25547"},
+
+	// https://walbourn.github.io/visual-studio-2015-update-2/
+	{0x5D6E, "VS2015 v14.0 UPD2 build 23918"},
+
+	// https://walbourn.github.io/visual-studio-2017/
+	{0x61B9, "VS2017 v15.[0,1] build 25017"},
+	{0x63A2, "VS2017 v15.2 build 25019"},
+
+	// https://walbourn.github.io/vs-2017-15-5-update/
+	{0x64E6, "VS2017 v15 build 25830"},
+	{0x64E7, "VS2017 v15.5.2 build 25831"},
+	{0x64EA, "VS2017 v15.5.[3,4] build 25834"},
+	{0x64EB, "VS2017 v15.5.[5,6,7] build 25835"},
+
+	// https://walbourn.github.io/vs-2017-15-6-update/
+	{0x6610, "VS2017 v15.6.[0,1,2] build 26128"},
+	{0x6611, "VS2017 v15.6.[3,4] build 26129"},
+	{0x6613, "VS2017 v15.6.6 build 26131"},
+	{0x6614, "VS2017 v15.6.7 build 26132"},
+
+	// https://devblogs.microsoft.com/visualstudio/visual-studio-2017-update/
+	{0x6723, "VS2017 v15.1 build 26403"},
+
+	// https://walbourn.github.io/vs-2017-15-7-update/
+	{0x673C, "VS2017 v15.7.[0,1] build 26428"},
+	{0x673D, "VS2017 v15.7.2 build 26429"},
+	{0x673E, "VS2017 v15.7.3 build 26430"},
+	{0x673F, "VS2017 v15.7.4 build 26431"},
+	{0x6741, "VS2017 v15.7.5 build 26433"},
+
+	// https://walbourn.github.io/visual-studio-2019/
+	{0x6B74, "VS2019 v16.0.0 build 27508"},
+
+	// https://walbourn.github.io/vs-2017-15-8-update/
+	{0x6866, "VS2017 v15.8.0 build 26726"},
+	{0x6869, "VS2017 v15.8.4 build 26729"},
+	{0x686A, "VS2017 v15.8.9 build 26730"},
+	{0x686C, "VS2017 v15.8.5 build 26732"},
+
+	// https://walbourn.github.io/vs-2017-15-9-update/
+	{0x698F, "VS2017 v15.9.[0,1] build 27023"},
+	{0x6990, "VS2017 v15.9.2 build 27024"},
+	{0x6991, "VS2017 v15.9.4 build 27025"},
+	{0x6992, "VS2017 v15.9.5 build 27026"},
+	{0x6993, "VS2017 v15.9.7 build 27027"},
+	{0x6996, "VS2017 v15.9.11 build 27030"},
+	{0x6997, "VS2017 v15.9.12 build 27031"},
+	{0x6998, "VS2017 v15.9.14 build 27032"},
+	{0x699A, "VS2017 v15.9.16 build 27034"},
+
+	// https://walbourn.github.io/vs-2019-update-3/
+	{0x6DC9, "VS2019 v16.3.2 UPD3 build 28105"},
+
+	// https://walbourn.github.io/visual-studio-2013-update-3/
+	{0x7803, "VS2013 v12.0 UPD3 build 30723"},
+
+	// experimentation
+	{0x685B, "VS2017 v15.8.? build 26715"},
+
+	{27508, "VS2019 v16.0.0 build 27508"},
+
+	// https://walbourn.github.io/vs-2019-update-1/
+	{27702, "VS2019 v16.1.2 build 27702"},
+
+	// https://walbourn.github.io/vs-2019-update-2/
+	{27905, "VS2019 v16.2.3 build 27905"},
+
+	// https://walbourn.github.io/vs-2019-update-3/
+	{28105, "VS2019 v16.3.2 build 28105"},
+
+	// https://walbourn.github.io/vs-2019-update-4/
+	{28314, "VS2019 v16.4.0 build 28314"},
+	{28315, "VS2019 v16.4.3 build 28315"},
+	{28316, "VS2019 v16.4.4 build 28316"},
+	{28319, "VS2019 v16.4.6 build 28319"},
+
+	// https://walbourn.github.io/vs-2019-update-5/
+	{28610, "VS2019 v16.5.0 build 28610"},
+	{28611, "VS2019 v16.5.1 build 28611"},
+	{28612, "VS2019 v16.5.2 build 28612"},
+	{28614, "VS2019 v16.5.4 build 28614"},
+
+	// https://walbourn.github.io/vs-2019-update-6/
+	{28805, "VS2019 v16.6.0 build 28805"},
+	{28806, "VS2019 v16.6.1 build 28806"},
+
+	// https://walbourn.github.io/vs-2019-update-7/
+	{29110, "VS2019 v16.7.0 build 29110"},
+	{29111, "VS2019 v16.7.1 build 29111"},
+	{29112, "VS2019 v16.7.5 build 29112"},
+
+	// https://walbourn.github.io/vs-2019-update-8/
+	{29333, "VS2019 v16.8.0 build 29333"},
+	{29334, "VS2019 v16.8.2 build 29334"},
+	{29335, "VS2019 v16.8.3 build 29335"},
+	{29336, "VS2019 v16.8.4 build 29336"},
+	{29337, "VS2019 v16.8.5 build 29337"},
+
+	// https://walbourn.github.io/vs-2019-update-9/
+	{29910, "VS2019 v16.9.0 build 29910"},
+	{29911, "VS2019 v16.9.1 build 29911"},
+	{29912, "VS2019 v16.9.2 build 29912"},
+	{29913, "VS2019 v16.9.3 build 29913"},
+	{29914, "VS2019 v16.9.4 build 29914"},
+	{29915, "VS2019 v16.9.5 build 29915"},
+
+	// https://walbourn.github.io/vs-2019-update-10/
+	{30037, "VS2019 v16.10.0 build 30037"},
+	{30038, "VS2019 v16.10.2 build 30038"},
+	{30040, "VS2019 v16.10.4 build 30040"},
+
+	// https://walbourn.github.io/vs-2019-update-11/
+	{30133, "VS2019 v16.11.0 build 30133"},
+	{30136, "VS2019 v16.11.4 build 30136"},
+	{30137, "VS2019 v16.11.6 build 30137"},
+	{30138, "VS2019 v16.11.8 build 30138"},
+	{30139, "VS2019 v16.11.9 build 30139"},
+	{30140, "VS2019 v16.11.10 build 30140"},
+	{30141, "VS2019 v16.11.11 build 30141"},
+	{30142, "VS2019 v16.11.12 build 30142"},
+	{30143, "VS2019 v16.11.13 build 30143"},
+	{30145, "VS2019 v16.11.14 build 30145"},
+	{30146, "VS2019 v16.11.16 build 30146"},
+	{30147, "VS2019 v16.11.19 build 30147"},
+	{30148, "VS2019 v16.11.24 build 30148"},
+
+	// https://walbourn.github.io/visual-studio-2022/
+	{30705, "VS2022 17.0.0 build 30705"},
+	{30706, "VS2022 17.0.2 build 30706"},
+	{30709, "VS2022 17.0.5 build 30709"},
+
+	// https://walbourn.github.io/vs-2022-update-1/
+	{31104, "VS2022 17.1.0 build 31104"},
+	{31105, "VS2022 17.1.2 build 31105"},
+	{31106, "VS2022 17.1.4 build 31106"},
+	{31107, "VS2022 17.1.6 build 31107"},
+
+	// https://walbourn.github.io/vs-2022-update-2/
+	{31328, "VS2022 v17.2.0 build 31328"},
+	{31329, "VS2022 v17.2.1 build 31329"},
+	{31332, "VS2022 v17.2.5 build 31332"},
+
+	// https://walbourn.github.io/vs-2022-update-3/
+	{31629, "VS2022 v17.3.0 build 31629"},
+	{31630, "VS2022 v17.3.4 build 31630"},
+
+	// https://walbourn.github.io/vs-2022-update-4/
+	{31933, "VS2022 17.4.0 build 31933"},
+	{31935, "VS2022 17.4.2 build 31935"},
+	{31937, "VS2022 17.4.3 build 31937"},
+	{31942, "VS2022 17.4.5 build 31942"},
+
+	// https://walbourn.github.io/vs-2022-update-5/
+	{32215, "VS2022 17.5.0 build 32215"},
+	{32216, "VS2022 17.5.3 build 32216"},
+	{32217, "VS2022 17.5.4 build 32217"},
+};
+
+static const string kUnknownProduct = "<unknown>";
+
+// Returns a stringified Rich header object type given a product id
+const string &GetRichObjectType(uint16_t prodId) {
+
+  auto it = ProductIdMap.find(prodId);
+  if (it != ProductIdMap.end()) {
+    return it->second;
+  } else {
+    return kProdId_UNK;
+  }
+}
+
+// Returns a stringified Rich header product name given a build number
+const string &GetRichProductName(uint16_t buildNum) {
+
+  auto it = ProductMap.find(buildNum);
+  if (it != ProductMap.end()) {
+    return it->second;
+  } else {
+    return kUnknownProduct;
+  }
+}
+
 static string GetDebugTypeName(int type)
 {
 	switch (type)
@@ -590,6 +926,17 @@ bool PEView::Init()
 			bool validRichHeader = false;
 			uint32_t xorKey = richValues[0].second;
 			uint32_t entryIdx;
+			vector<uint64_t> richMetadataLookupIdentifiers;
+			vector<string> richMetadataLookupNames;
+			for (const auto& [id, name] : ProductMap)
+			{
+				richMetadataLookupIdentifiers.push_back(id);
+				richMetadataLookupNames.push_back(name);
+			}
+			StoreMetadata("RichHeaderLookupIdentifiers", new Metadata(richMetadataLookupIdentifiers));
+			StoreMetadata("RichHeaderLookupNames", new Metadata(richMetadataLookupNames));
+
+			vector<Ref<Metadata>> richMetadata;
 			for (entryIdx = 0; entryIdx < richValues.size(); entryIdx++)
 			{
 				if ((richValues[entryIdx].first == 0x68636952) && (richValues[entryIdx].second == xorKey))
@@ -600,12 +947,24 @@ bool PEView::Init()
 
 				richValues[entryIdx].first ^= xorKey;
 				richValues[entryIdx].second ^= xorKey;
+				if (entryIdx > 1) // Skip the first 2 entries as they don't contain interesting information
+				{
+					map<string, Ref<Metadata>> entryMetadata = {
+						{string("ObjectTypeValue"), new Metadata((uint64_t)richValues[entryIdx].first >> 16)},
+						{string("ObjectTypeName"), new Metadata(GetRichObjectType(richValues[entryIdx].first >> 16))},
+						{string("ObjectVersionValue"), new Metadata((uint64_t)richValues[entryIdx].first & 0xffff)},
+						{string("ObjectVersionName"), new Metadata(GetRichProductName(richValues[entryIdx].first & 0xffff))},
+						{string("ObjectCount"), new Metadata((uint64_t)richValues[entryIdx].second)}
+						};
+					richMetadata.push_back(new Metadata(entryMetadata));
+				}
 				if (!entryIdx && richValues[entryIdx].first != 0x536e6144)
 					break;
 			}
 
 			if (validRichHeader)
 			{
+				StoreMetadata("RichHeader", new Metadata(richMetadata), true);
 				StructureBuilder richHeaderBuilder;
 				richHeaderBuilder.AddMember(Type::IntegerType(4, false), "e_magic__DanS");
 				richHeaderBuilder.AddMember(Type::ArrayType(Type::IntegerType(4, false), 3), "e_align");
