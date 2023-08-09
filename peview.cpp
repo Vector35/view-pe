@@ -2284,7 +2284,6 @@ bool PEView::Init()
 
 				auto guardCFCheckPointerSymbol = new Symbol(DataSymbol, "__guard_check_icall_fptr", guardCFCheckFunctionPointer, NoBinding);
 				auto guardCFCheckSymbol = new Symbol(FunctionSymbol, "_guard_check_icall", guardCFCheckFunction, NoBinding);
-				LogError("Making function at %llx", guardCFCheckFunction);
 				auto guardCFCheckDispatchSymbol = new Symbol(DataSymbol, "__guard_dispatch_icall_fptr", guardCFDispatchFunctionPointer, NoBinding);
 				auto guardCFDispatchSymbol = new Symbol(FunctionSymbol, "_guard_dispatch_icall_nop", guardCFDispatchFunction, NoBinding);
 				DefineAutoSymbolAndVariableOrFunction(GetDefaultPlatform(), guardCFCheckPointerSymbol, pointerGuardCFCheckFunctionType);
