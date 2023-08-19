@@ -433,6 +433,7 @@ namespace BinaryNinja
 		Ref<Architecture> m_arch;
 		bool m_is64;
 		bool m_extractMangledTypes;
+		bool m_simplifyTemplates;
 		Ref<Logger> m_logger;
 		bool m_relocatable = false;
 

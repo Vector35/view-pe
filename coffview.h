@@ -330,6 +330,7 @@ namespace BinaryNinja
 		Ref<Architecture> m_arch;
 		bool m_is64;
 		bool m_extractMangledTypes;
+		bool m_simplifyTemplates;
 		bool m_relocatable = false;
 
 		virtual uint64_t PerformGetEntryPoint() const override;

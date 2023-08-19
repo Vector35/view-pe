@@ -205,10 +205,9 @@ bool COFFView::Init()
 				m_arch = arch;
 		}
 
-		m_extractMangledTypes = false;
-		if (settings && settings->Contains("analysis.extractTypesFromMangledNames"))
-			m_extractMangledTypes = settings->Get<bool>("analysis.extractTypesFromMangledNames", this);
-
+		Ref<Settings> viewSettings = Settings::Instance();
+		m_extractMangledTypes = viewSettings->Get<bool>("analysis.extractTypesFromMangledNames", this);
+		m_simplifyTemplates = viewSettings->Get<bool>("analysis.types.templateSimplifier", this);
 
 		// Add extra segment to hold header so that it can be viewed.  This must be first so
 		// that real sections take priority.
@@ -1509,7 +1508,7 @@ void COFFView::AddCOFFSymbol(BNSymbolType type, const string& dll, const string&
 	{
 		QualifiedName demangleName;
 		Ref<Type> demangledType;
-		if (DemangleMS(m_arch, name, demangledType, demangleName, this))
+		if (DemangleMS(m_arch, name, demangledType, demangleName, m_simplifyTemplates))
 		{
 			shortName = demangleName.GetString();
 			fullName = shortName + demangledType->GetStringAfterName();

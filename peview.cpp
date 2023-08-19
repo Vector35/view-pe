@@ -591,9 +591,8 @@ bool PEView::Init()
 		m_entryPoint = opt.addressOfEntry;
 
 		Ref<Settings> viewSettings = Settings::Instance();
-		m_extractMangledTypes = false;
-		if (viewSettings && viewSettings->Contains("analysis.extractTypesFromMangledNames"))
-			m_extractMangledTypes = viewSettings->Get<bool>("analysis.extractTypesFromMangledNames", this);
+		m_extractMangledTypes = viewSettings->Get<bool>("analysis.extractTypesFromMangledNames", this);
+		m_simplifyTemplates = viewSettings->Get<bool>("analysis.types.templateSimplifier", this);
 
 		settings = GetLoadSettings(GetTypeName());
 		if (settings && settings->Contains("loader.imageBase") && settings->Contains("loader.architecture")) // handle overrides
@@ -2719,7 +2718,7 @@ void PEView::AddPESymbol(BNSymbolType type, const string& dll, const string& nam
 			{
 				QualifiedName demangleName;
 				Ref<Type> demangledType;
-				if (name[0] == '?' && DemangleMS(m_arch, name, demangledType, demangleName, this))
+				if (name[0] == '?' && DemangleMS(m_arch, name, demangledType, demangleName, m_simplifyTemplates))
 				{
 					shortName = demangleName.GetString();
 					fullName = shortName + demangledType->GetStringAfterName();
@@ -2728,7 +2727,7 @@ void PEView::AddPESymbol(BNSymbolType type, const string& dll, const string& nam
 				}
 				else if (IsGNU3MangledString(rawName))
 				{
-					if (DemangleGNU3(m_arch, rawName, demangledType, demangleName, this))
+					if (DemangleGNU3(m_arch, rawName, demangledType, demangleName, m_simplifyTemplates))
 					{
 						shortName = demangleName.GetString();
 						fullName = shortName;
