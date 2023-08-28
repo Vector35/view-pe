@@ -932,8 +932,8 @@ bool PEView::Init()
 				richMetadataLookupIdentifiers.push_back(id);
 				richMetadataLookupNames.push_back(name);
 			}
-			StoreMetadata("RichHeaderLookupIdentifiers", new Metadata(richMetadataLookupIdentifiers));
-			StoreMetadata("RichHeaderLookupNames", new Metadata(richMetadataLookupNames));
+			StoreMetadata("RichHeaderLookupIdentifiers", new Metadata(richMetadataLookupIdentifiers), true);
+			StoreMetadata("RichHeaderLookupNames", new Metadata(richMetadataLookupNames), true);
 
 			vector<Ref<Metadata>> richMetadata;
 			for (entryIdx = 0; entryIdx < richValues.size(); entryIdx++)
