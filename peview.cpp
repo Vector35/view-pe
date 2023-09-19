@@ -2513,8 +2513,19 @@ bool PEView::Init()
 		if (m_dataDirs.size() > IMAGE_DIRECTORY_ENTRY_BASERELOC)
 		{
 			PEDataDirectory dir = m_dataDirs[IMAGE_DIRECTORY_ENTRY_BASERELOC];
-			if (dir.size > 0 && dir.virtualAddress)
+			// Check if there is a '.reloc' section that is different than this directory entry
+			vector<PEDataDirectory> dirs = { m_dataDirs[IMAGE_DIRECTORY_ENTRY_BASERELOC]};
+			auto section = find_if(m_sections.begin(), m_sections.end(), [](const PESection& section) { return section.name == ".reloc"; });
+			if (section != m_sections.end())
 			{
+				if (section->virtualAddress != dir.virtualAddress)
+					dirs.push_back({ section->virtualAddress, section->sizeOfRawData });
+			}
+			for (auto& dir : dirs)
+			{
+				if (dir.size == 0 || dir.virtualAddress == 0)
+					continue;
+
 				reader.Seek(RVAToFileOffset(dir.virtualAddress));
 				uint64_t size = 0;
 				while (size < dir.size)
