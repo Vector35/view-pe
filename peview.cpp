@@ -2255,7 +2255,7 @@ bool PEView::Init()
 			// parse CFG table
 			if ((loadConfigSize >= (uint32_t)(m_is64 ? 0x94 : 0x40)) && (m_is64 || (opt.dllCharacteristics & IMAGE_DLLCHARACTERISTICS_GUARD_CF)))
 			{
-				size_t cfgFields = m_is64 ? 112 : 68;
+				size_t cfgFields = m_is64 ? 112 : 72;
 				reader.Seek(RVAToFileOffset(m_dataDirs[IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG].virtualAddress + cfgFields));
 
 				uint64_t guardCFCheckFunctionPointer = m_is64 ? reader.Read64() : reader.Read32();
@@ -2332,7 +2332,6 @@ bool PEView::Init()
 								auto value = reader.Read8();
 								if (mdIdx == 0 && (value & IMAGE_GUARD_FLAG_FID_XFG) != 0)
 								{
-									// Warning: This is completely undocumented. I did have insider confirmation that it is indeed correct though.
 									DefineDataVariable(cfgAddr - 8, Type::IntegerType(8, false));
 								}
 							}
