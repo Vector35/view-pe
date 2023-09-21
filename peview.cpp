@@ -2469,20 +2469,9 @@ bool PEView::Init()
 
 				if ((rvAddr >= exportTableStart) && (rvAddr < exportTableEnd))
 				{
-					string dllName;
-					string exportName;
 					string forwarderName = ReadString(rvAddr);
-					size_t strPos = forwarderName.find_first_of(".");
-					if (strPos == string::npos)
-						exportName = forwarderName;
-					else
-					{
-						dllName = forwarderName.substr(0, strPos);
-						exportName = forwarderName.substr(strPos + 1);
-					}
-
 					DefineDataVariable(m_imageBase + rvAddr, Type::ArrayType(Type::IntegerType(1, true), forwarderName.size() + 1));
-					DefineAutoSymbol(new Symbol(DataSymbol, "__forwarder_name(" + exportName + ")", m_imageBase + rvAddr, GlobalBinding,
+					DefineAutoSymbol(new Symbol(DataSymbol, "__forwarder_name(" + forwarderName + ")", m_imageBase + rvAddr, GlobalBinding,
 						NameSpace(DEFAULT_INTERNAL_NAMESPACE), i + dir.base));
 				}
 				else
