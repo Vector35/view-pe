@@ -2752,12 +2752,19 @@ void PEView::AddPESymbol(BNSymbolType type, const string& dll, const string& nam
 			{
 				QualifiedName demangleName;
 				Ref<Type> demangledType;
-				if (name[0] == '?' && DemangleMS(m_arch, name, demangledType, demangleName, m_simplifyTemplates))
+				if (name[0] == '?')
 				{
-					shortName = demangleName.GetString();
-					fullName = shortName + demangledType->GetStringAfterName();
-					if (!typeRef && m_extractMangledTypes && !GetDefaultPlatform()->GetFunctionByName(rawName))
-						typeRef = demangledType;
+					if (DemangleMS(m_arch, name, demangledType, demangleName, m_simplifyTemplates))
+					{
+						shortName = demangleName.GetString();
+						fullName = shortName + demangledType->GetStringAfterName();
+						if (!typeRef && m_extractMangledTypes && !GetDefaultPlatform()->GetFunctionByName(rawName))
+							typeRef = demangledType;
+					}
+					else
+					{
+						m_logger->LogDebug("Failed to demangle: '%s'\n", name.c_str());
+					}
 				}
 				else if (IsGNU3MangledString(rawName))
 				{
@@ -2775,10 +2782,7 @@ void PEView::AddPESymbol(BNSymbolType type, const string& dll, const string& nam
 						m_logger->LogDebug("Failed to demangle name: '%s'\n", rawName.c_str());
 					}
 				}
-				else
-				{
-					m_logger->LogDebug("Failed to demangle: '%s'\n", name.c_str());
-				}
+				// Not a mangled string
 			}
 
 			NameSpace ns(dll);
