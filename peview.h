@@ -438,6 +438,7 @@ namespace BinaryNinja
 		bool m_relocatable = false;
 
 		SymbolQueue* m_symbolQueue = nullptr;
+		std::unordered_map<std::string, std::vector<std::string>> m_externLibSymbols;
 
 		uint64_t RVAToFileOffset(uint64_t rva, bool except = true);
 		uint32_t GetRVACharacteristics(uint64_t rva);
