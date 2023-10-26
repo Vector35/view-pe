@@ -2546,6 +2546,7 @@ bool PEView::Init()
 
 	EndBulkModifySymbols();
 
+	//TODO: Fix log spew
 	for (const auto& i : m_externLibSymbols)
 	{
 		Ref<ExternalLibrary> externLib = GetExternalLibrary(i.first);
