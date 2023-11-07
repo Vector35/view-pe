@@ -1674,17 +1674,22 @@ bool PEView::Init()
 							uint8_t unwindCodeCount = (unwindInformation >> 16) & 0xff;
 							if (unwindCodeCount > 0)
 								DefineDataVariable(m_imageBase + unwindRva + 4, Type::ArrayType(Type::IntegerType(2, false), unwindCodeCount));
+
+							auto current = m_imageBase + unwindRva + 4 + (unwindCodeCount * 2);
+							if (current % 4 != 0)
+								current += 4 - (current % 4); // Align to DWORD
+
 							if (unwindInformation & (UNW_FLAG_CHAININFO << 3))
 							{
-								continue; // skip; not a primary exception entry for a procedure
+								DefineDataVariable(current, Type::NamedType(this, exceptionEntryTypeName));
+								continue;
 							}
 							else if ((unwindInformation & (UNW_FLAG_UHANDLER << 3)) || (unwindInformation & (UNW_FLAG_EHANDLER << 3)))
 							{
-								auto current = m_imageBase + unwindRva + 4 + (unwindCodeCount * 2);
 								DefineDataVariable(current, Type::IntegerType(4, false));
 								// unwindReader.Seek(RVAToFileOffset(unwindRva + 8 + (unwindCodeCount * 2)));
 								// uint32_t count = unwindReader.Read32();
-								DefineDataVariable(current + 4, Type::ArrayType(Type::IntegerType(4, false), 3));
+								// DefineDataVariable(current + 4, Type::ArrayType(Type::IntegerType(4, false), 3));
 							}
 							break;
 						}
