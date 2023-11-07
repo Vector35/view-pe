@@ -1629,7 +1629,7 @@ bool PEView::Init()
 			// So instead we just create separate structures not in an array
 			Ref<Structure> exceptionEntryStruct = exceptionEntryBuilder.Finalize();
 			Ref<Type> exceptionEntryType = Type::StructureType(exceptionEntryStruct);
-			QualifiedName exceptionEntryName = string("Exception_Directory_Entry");
+			QualifiedName exceptionEntryName = string("IMAGE_RUNTIME_FUNCTION");
 			string exceptionEntryTypeId = Type::GenerateAutoTypeId("pe", exceptionEntryName);
 			QualifiedName exceptionEntryTypeName = DefineType(exceptionEntryTypeId, exceptionEntryName, exceptionEntryType);
 			for (size_t i = 0; i < numExceptionEntries; i++)
@@ -1674,17 +1674,21 @@ bool PEView::Init()
 							uint8_t unwindCodeCount = (unwindInformation >> 16) & 0xff;
 							if (unwindCodeCount > 0)
 								DefineDataVariable(m_imageBase + unwindRva + 4, Type::ArrayType(Type::IntegerType(2, false), unwindCodeCount));
+
+							auto current = m_imageBase + unwindRva + 4 + (unwindCodeCount * 2);
+							if (current % 4 != 0)
+								current += 4 - (current % 4); // Align to DWORD
+
 							if (unwindInformation & (UNW_FLAG_CHAININFO << 3))
 							{
-								continue; // skip; not a primary exception entry for a procedure
+								DefineDataVariable(current, Type::NamedType(this, exceptionEntryTypeName));
 							}
 							else if ((unwindInformation & (UNW_FLAG_UHANDLER << 3)) || (unwindInformation & (UNW_FLAG_EHANDLER << 3)))
 							{
-								auto current = m_imageBase + unwindRva + 4 + (unwindCodeCount * 2);
 								DefineDataVariable(current, Type::IntegerType(4, false));
 								// unwindReader.Seek(RVAToFileOffset(unwindRva + 8 + (unwindCodeCount * 2)));
 								// uint32_t count = unwindReader.Read32();
-								DefineDataVariable(current + 4, Type::ArrayType(Type::IntegerType(4, false), 3));
+								// DefineDataVariable(current + 4, Type::ArrayType(Type::IntegerType(4, false), 3));
 							}
 							break;
 						}
