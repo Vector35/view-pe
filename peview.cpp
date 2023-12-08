@@ -1545,9 +1545,6 @@ bool PEView::Init()
 					AddPESymbol(ImportAddressSymbol, dllName, func, iatOffset, NoBinding, ordinal, typeLib);
 					AddPESymbol(ExternalSymbol, dllName, func, 0, NoBinding, ordinal, typeLib);
 
-					if (externLib)
-						m_externLibSymbols[externLib->GetName()].push_back(func);
-
 					BNRelocationInfo reloc;
 					memset(&reloc, 0, sizeof(reloc));
 					reloc.nativeType = -1;
@@ -2545,22 +2542,6 @@ bool PEView::Init()
 	m_symbolQueue = nullptr;
 
 	EndBulkModifySymbols();
-
-	//TODO: Fix log spew
-	for (const auto& i : m_externLibSymbols)
-	{
-		Ref<ExternalLibrary> externLib = GetExternalLibrary(i.first);
-		if (!externLib)
-			continue;
-		for (const auto& sym : i.second)
-		{
-			Ref<ExternalLocation> externLoc = GetExternalLocation(sym);
-			if (externLoc)
-			{
-				externLoc->SetExternalLibrary(externLib);
-			}
-		}
-	}
 
 	try
 	{
