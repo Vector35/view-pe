@@ -1277,6 +1277,7 @@ bool PEView::Init()
 	vector<pair<BNRelocationInfo, string>> relocs;
 	BeginBulkModifySymbols();
 	m_symbolQueue = new SymbolQueue();
+	m_symExternMappingMetadata = new Metadata(KeyValueDataType);
 
 	try
 	{
@@ -1544,6 +1545,9 @@ bool PEView::Init()
 					m_logger->LogDebug("FuncString: %s\n", func.c_str());
 					AddPESymbol(ImportAddressSymbol, dllName, func, iatOffset, NoBinding, ordinal, typeLib);
 					AddPESymbol(ExternalSymbol, dllName, func, 0, NoBinding, ordinal, typeLib);
+
+					if (externLib)
+						m_symExternMappingMetadata->SetValueForKey(func, new Metadata(externLib->GetName()));
 
 					BNRelocationInfo reloc;
 					memset(&reloc, 0, sizeof(reloc));
@@ -2542,6 +2546,8 @@ bool PEView::Init()
 	m_symbolQueue = nullptr;
 
 	EndBulkModifySymbols();
+
+	StoreMetadata("SymbolExternalLibraryMapping", m_symExternMappingMetadata);
 
 	try
 	{

@@ -439,6 +439,8 @@ namespace BinaryNinja
 
 		SymbolQueue* m_symbolQueue = nullptr;
 
+		Ref<Metadata> m_symExternMappingMetadata;
+
 		uint64_t RVAToFileOffset(uint64_t rva, bool except = true);
 		uint32_t GetRVACharacteristics(uint64_t rva);
 		std::string ReadString(uint64_t rva);
