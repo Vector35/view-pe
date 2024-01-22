@@ -1277,6 +1277,7 @@ bool PEView::Init()
 	vector<pair<BNRelocationInfo, string>> relocs;
 	BeginBulkModifySymbols();
 	m_symbolQueue = new SymbolQueue();
+	m_symExternMappingMetadata = new Metadata(KeyValueDataType);
 
 	try
 	{
@@ -1406,16 +1407,16 @@ bool PEView::Init()
 			{
 				// Read in next directory entry
 				reader.Seek(RVAToFileOffset(dir.virtualAddress + (numImportEntries * 20)));
-				PEImportDirectoryEntry entry;
-				entry.lookup = reader.Read32();
-				entry.timestamp = reader.Read32();
-				entry.forwardChain = reader.Read32();
-				entry.nameAddress = reader.Read32();
-				entry.iat = reader.Read32();
+				PEImportDirectoryEntry importDirEntry;
+				importDirEntry.lookup = reader.Read32();
+				importDirEntry.timestamp = reader.Read32();
+				importDirEntry.forwardChain = reader.Read32();
+				importDirEntry.nameAddress = reader.Read32();
+				importDirEntry.iat = reader.Read32();
 
 				// Windows PE loader ignores the dir.size; instead, it looks for the first
 				// Import_Directory_Table that has a null nameAddress to stop the iteration
-				if (entry.nameAddress == 0)
+				if (importDirEntry.nameAddress == 0)
 				{
 					if (numImportEntries + 1 != dir.size / 20)
 						m_logger->LogWarn(
@@ -1429,9 +1430,14 @@ bool PEView::Init()
 				}
 
 				// Read name of imported DLL, and trim extension for creating symbol name
-				entry.name = ReadString(entry.nameAddress);
-				libraries.push_back(new Metadata(string(entry.name)));
-				string lowerName = entry.name;
+				importDirEntry.name = ReadString(importDirEntry.nameAddress);
+				Ref<ExternalLibrary> externLib = GetExternalLibrary(importDirEntry.name);
+				if (!externLib)
+				{
+					externLib = AddExternalLibrary(importDirEntry.name, {}, true);
+				}
+				libraries.push_back(new Metadata(string(importDirEntry.name)));
+				string lowerName = importDirEntry.name;
 				std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(),
 						[](unsigned char c){ return std::tolower(c); });
 
@@ -1465,20 +1471,20 @@ bool PEView::Init()
 				if (ordinals && !ordinals->IsKeyValueStore())
 					ordinals = nullptr;
 
-				size_t dotPos = entry.name.rfind('.');
+				size_t dotPos = importDirEntry.name.rfind('.');
 				string dllName;
 				if (dotPos == string::npos)
-					dllName = entry.name;
+					dllName = importDirEntry.name;
 				else
-					dllName = entry.name.substr(0, dotPos);
+					dllName = importDirEntry.name.substr(0, dotPos);
 
 				// Create Import DLL Name Type
-				DefineDataVariable(m_imageBase + entry.nameAddress, Type::ArrayType(Type::IntegerType(1, true), entry.name.size() + 1));
-				DefineAutoSymbol(new Symbol(DataSymbol, "__import_dll_name(" + dllName + ")", m_imageBase + entry.nameAddress, NoBinding));
+				DefineDataVariable(m_imageBase + importDirEntry.nameAddress, Type::ArrayType(Type::IntegerType(1, true), importDirEntry.name.size() + 1));
+				DefineAutoSymbol(new Symbol(DataSymbol, "__import_dll_name(" + dllName + ")", m_imageBase + importDirEntry.nameAddress, NoBinding));
 
 				// Parse list of imported functions
-				uint32_t entryOffset = entry.lookup;
-				uint32_t iatOffset = entry.iat;
+				uint32_t entryOffset = importDirEntry.lookup;
+				uint32_t iatOffset = importDirEntry.iat;
 
 				if ((entryOffset == 0) && (iatOffset != 0))
 					entryOffset = iatOffset;
@@ -1539,6 +1545,10 @@ bool PEView::Init()
 					m_logger->LogDebug("FuncString: %s\n", func.c_str());
 					AddPESymbol(ImportAddressSymbol, dllName, func, iatOffset, NoBinding, ordinal, typeLib);
 					AddPESymbol(ExternalSymbol, dllName, func, 0, NoBinding, ordinal, typeLib);
+
+					if (externLib)
+						m_symExternMappingMetadata->SetValueForKey(func, new Metadata(externLib->GetName()));
+
 					BNRelocationInfo reloc;
 					memset(&reloc, 0, sizeof(reloc));
 					reloc.nativeType = -1;
@@ -2536,6 +2546,8 @@ bool PEView::Init()
 	m_symbolQueue = nullptr;
 
 	EndBulkModifySymbols();
+
+	StoreMetadata("SymbolExternalLibraryMapping", m_symExternMappingMetadata);
 
 	try
 	{
