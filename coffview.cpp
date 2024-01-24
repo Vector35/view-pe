@@ -1481,13 +1481,13 @@ void COFFView::AddCOFFSymbol(BNSymbolType type, const string& dll, const string&
 	}
 
 	Ref<Type> symbolTypeRef;
-
-	if (lib && ((type == ExternalSymbol) || (type == ImportAddressSymbol) || (type == ImportedDataSymbol)))
+	auto address = type == ExternalSymbol ? addr : m_imageBase + addr;
+	if (lib && ((type == ImportAddressSymbol) || (type == ImportedDataSymbol)))
 	{
 		QualifiedName n(name);
 		Ref<TypeLibrary> appliedLib = lib;
 		symbolTypeRef = ImportTypeLibraryObject(appliedLib, n);
-		if (symbolTypeRef)
+		if (symbolTypeRef && type != ExternalSymbol)
 		{
 			LogDebug("COFF: type library '%s' found hit for '%s'", lib->GetGuid().c_str(), name.c_str());
 			RecordImportedObjectLibrary(GetDefaultPlatform(), m_imageBase + addr, appliedLib, n);
@@ -1524,7 +1524,7 @@ void COFFView::AddCOFFSymbol(BNSymbolType type, const string& dll, const string&
 	}
 
 	DefineAutoSymbolAndVariableOrFunction(GetDefaultPlatform(),
-		new Symbol(type, shortName, fullName, rawName, m_imageBase + addr, binding, nameSpace, ordinal), symbolTypeRef);
+		new Symbol(type, shortName, fullName, rawName, address, binding, nameSpace, ordinal), symbolTypeRef);
 }
 
 

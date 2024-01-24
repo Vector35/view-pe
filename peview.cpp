@@ -2740,6 +2740,7 @@ void PEView::AddPESymbol(BNSymbolType type, const string& dll, const string& nam
 			return;
 	}
 
+	auto address = type == ExternalSymbol ? addr : m_imageBase + addr;
 	Ref<Type> symbolTypeRef;
 
 	if (lib && ((type == ExternalSymbol) || (type == ImportAddressSymbol) || (type == ImportedDataSymbol)))
@@ -2747,10 +2748,10 @@ void PEView::AddPESymbol(BNSymbolType type, const string& dll, const string& nam
 		QualifiedName n(name);
 		Ref<TypeLibrary> appliedLib = lib;
 		symbolTypeRef = ImportTypeLibraryObject(appliedLib, n);
-		if (symbolTypeRef)
+		if (symbolTypeRef && type != ExternalSymbol)
 		{
 			m_logger->LogDebug("pe: type library '%s' found hit for '%s'", lib->GetGuid().c_str(), name.c_str());
-			RecordImportedObjectLibrary(GetDefaultPlatform(), m_imageBase + addr, appliedLib, n);
+			RecordImportedObjectLibrary(GetDefaultPlatform(), address, appliedLib, n);
 		}
 	}
 
@@ -2808,7 +2809,7 @@ void PEView::AddPESymbol(BNSymbolType type, const string& dll, const string& nam
 				ns = GetExternalNameSpace();
 
 			return pair<Ref<Symbol>, Ref<Type>>(
-				new Symbol(type, shortName, fullName, rawName, m_imageBase + addr, binding, ns, ordinal),
+				new Symbol(type, shortName, fullName, rawName, address, binding, ns, ordinal),
 				typeRef);
 		},
 		[this](Symbol* symbol, Type* type) {
