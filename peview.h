@@ -448,7 +448,7 @@ namespace BinaryNinja
 		uint32_t Read32(uint64_t rva);
 		uint64_t Read64(uint64_t rva);
 		void AddPESymbol(BNSymbolType type, const std::string& dll, const std::string& name, uint64_t addr,
-			BNSymbolBinding binding = NoBinding, uint64_t ordinal = 0, TypeLibrary* lib = nullptr);
+			BNSymbolBinding binding = NoBinding, uint64_t ordinal = 0, std::vector<Ref<TypeLibrary>> lib = {});
 
 	protected:
 		virtual uint64_t PerformGetEntryPoint() const override;

@@ -1441,35 +1441,34 @@ bool PEView::Init()
 				std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(),
 						[](unsigned char c){ return std::tolower(c); });
 
-				Ref<TypeLibrary> typeLib = GetTypeLibrary(lowerName);
-				if (!typeLib)
+				vector<Ref<TypeLibrary>> typeLibs = platform->GetTypeLibrariesByName(lowerName);
+				for (const auto& typeLib : typeLibs)
 				{
-					vector<Ref<TypeLibrary>> typeLibs = platform->GetTypeLibrariesByName(lowerName);
-					if (typeLibs.size())
-					{
-						typeLib = typeLibs[0];
-						AddTypeLibrary(typeLib);
+					AddTypeLibrary(typeLib);
 
-						m_logger->LogDebug("pe: adding type library for '%s': %s (%s)", lowerName.c_str(),
-							typeLib->GetName().c_str(), typeLib->GetGuid().c_str());
-					}
+					m_logger->LogDebug("pe: adding type library for '%s': %s (%s)", lowerName.c_str(),
+						typeLib->GetName().c_str(), typeLib->GetGuid().c_str());
 				}
 
 				Ref<Metadata> ordinals;
-				if (typeLib)
+				if (typeLibs.size())
 				{
-					char ordinal_subsystem[64];
-					snprintf(ordinal_subsystem, sizeof(ordinal_subsystem), "ordinals_%hu_%hu", opt.majorOSVersion, opt.minorOSVersion);
-					ordinals = typeLib->QueryMetadata("ordinals");
-					libraryFound.push_back(new Metadata(string(typeLib->GetName())));
+					for (const auto& typeLib : typeLibs)
+					{
+						char ordinal_subsystem[64];
+						snprintf(ordinal_subsystem, sizeof(ordinal_subsystem), "ordinals_%hu_%hu", opt.majorOSVersion, opt.minorOSVersion);
+						ordinals = typeLib->QueryMetadata("ordinals");
+						libraryFound.push_back(new Metadata(string(typeLib->GetName())));
+						if (ordinals && ordinals->IsString())
+							ordinals = typeLib->QueryMetadata(ordinals->GetString());
+
+						if (ordinals && !ordinals->IsKeyValueStore())
+							ordinals = nullptr;
+					}
 				}
 				else
 					libraryFound.push_back(new Metadata(string("")));
 
-				if (ordinals && ordinals->IsString())
-					ordinals = typeLib->QueryMetadata(ordinals->GetString());
-				if (ordinals && !ordinals->IsKeyValueStore())
-					ordinals = nullptr;
 
 				size_t dotPos = importDirEntry.name.rfind('.');
 				string dllName;
@@ -1543,8 +1542,8 @@ bool PEView::Init()
 						DefineAutoSymbol(new Symbol(DataSymbol, "__import_lookup_table_" + to_string(numImportEntries) + "(" + dllName + ":" + func + ")", m_imageBase + entryOffset, NoBinding));
 					}
 					m_logger->LogDebug("FuncString: %s\n", func.c_str());
-					AddPESymbol(ImportAddressSymbol, dllName, func, iatOffset, NoBinding, ordinal, typeLib);
-					AddPESymbol(ExternalSymbol, dllName, func, 0, NoBinding, ordinal, typeLib);
+					AddPESymbol(ImportAddressSymbol, dllName, func, iatOffset, NoBinding, ordinal, typeLibs);
+					AddPESymbol(ExternalSymbol, dllName, func, 0, NoBinding, ordinal, typeLibs);
 
 					if (externLib)
 						m_symExternMappingMetadata->SetValueForKey(func, new Metadata(externLib->GetName()));
@@ -2013,22 +2012,18 @@ bool PEView::Init()
 				std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(),
 						[](unsigned char c){ return std::tolower(c); });
 
-				Ref<TypeLibrary> typeLib = GetTypeLibrary(lowerName);
-				if (!typeLib)
-				{
-					vector<Ref<TypeLibrary>> typeLibs = platform->GetTypeLibrariesByName(lowerName);
-					if (typeLibs.size())
-					{
-						typeLib = typeLibs[0];
-						AddTypeLibrary(typeLib);
 
-						m_logger->LogDebug("pe: adding type library for '%s': %s (%s)", lowerName.c_str(),
-							typeLib->GetName().c_str(), typeLib->GetGuid().c_str());
-					}
+				vector<Ref<TypeLibrary>> typeLibs = platform->GetTypeLibrariesByName(lowerName);
+				for (const auto& typeLib : typeLibs)
+				{
+					AddTypeLibrary(typeLib);
+
+					m_logger->LogDebug("pe: adding type library for '%s': %s (%s)", lowerName.c_str(),
+						typeLib->GetName().c_str(), typeLib->GetGuid().c_str());
 				}
 
 				Ref<Metadata> ordinals;
-				if (typeLib)
+				for (const auto& typeLib : typeLibs)
 					ordinals = typeLib->QueryMetadata("ordinals");
 				if (ordinals && !ordinals->IsKeyValueStore())
 					ordinals = nullptr;
@@ -2100,8 +2095,8 @@ bool PEView::Init()
 						DefineAutoSymbol(new Symbol(DataSymbol, "__delay_import_lookup_table_" + to_string(numImportDelayEntries) + "(" + dllName + ":" + func + ")", m_imageBase + entryOffset, NoBinding));
 					}
 					m_logger->LogDebug("FuncString: %s\n", func.c_str());
-					AddPESymbol(ImportAddressSymbol, dllName, func, iatOffset, NoBinding, ordinal, typeLib);
-					AddPESymbol(ExternalSymbol, dllName, func, 0, NoBinding, ordinal, typeLib);
+					AddPESymbol(ImportAddressSymbol, dllName, func, iatOffset, NoBinding, ordinal, typeLibs);
+					AddPESymbol(ExternalSymbol, dllName, func, 0, NoBinding, ordinal, typeLibs);
 					BNRelocationInfo reloc;
 					memset(&reloc, 0, sizeof(reloc));
 					reloc.nativeType = -1;
@@ -2714,7 +2709,7 @@ uint64_t PEView::Read64(uint64_t rva)
 
 // The addr is RVA
 void PEView::AddPESymbol(BNSymbolType type, const string& dll, const string& name, uint64_t addr,
-		BNSymbolBinding binding, uint64_t ordinal, TypeLibrary* lib)
+		BNSymbolBinding binding, uint64_t ordinal, vector<Ref<TypeLibrary>> libs)
 {
 	// Don't create symbols that are present in the database snapshot now
 	if (type != ExternalSymbol && m_backedByDatabase)
@@ -2743,15 +2738,18 @@ void PEView::AddPESymbol(BNSymbolType type, const string& dll, const string& nam
 	auto address = type == ExternalSymbol ? addr : m_imageBase + addr;
 	Ref<Type> symbolTypeRef;
 
-	if (lib && ((type == ExternalSymbol) || (type == ImportAddressSymbol) || (type == ImportedDataSymbol)))
+	if (libs.size() && ((type == ExternalSymbol) || (type == ImportAddressSymbol) || (type == ImportedDataSymbol)))
 	{
 		QualifiedName n(name);
-		Ref<TypeLibrary> appliedLib = lib;
-		symbolTypeRef = ImportTypeLibraryObject(appliedLib, n);
-		if (symbolTypeRef && type != ExternalSymbol)
+		for (auto lib : libs)
 		{
-			m_logger->LogDebug("pe: type library '%s' found hit for '%s'", lib->GetGuid().c_str(), name.c_str());
-			RecordImportedObjectLibrary(GetDefaultPlatform(), address, appliedLib, n);
+			Ref<TypeLibrary> appliedLib = lib;
+			symbolTypeRef = ImportTypeLibraryObject(appliedLib, n);
+			if (symbolTypeRef)
+			{
+				m_logger->LogDebug("pe: type library '%s' found hit for '%s'", lib->GetGuid().c_str(), name.c_str());
+				RecordImportedObjectLibrary(GetDefaultPlatform(), address, appliedLib, n);
+			}
 		}
 	}
 
