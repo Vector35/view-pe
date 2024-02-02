@@ -2547,7 +2547,7 @@ bool PEView::Init()
 
 	EndBulkModifySymbols();
 
-	StoreMetadata("SymbolExternalLibraryMapping", m_symExternMappingMetadata);
+	StoreMetadata("SymbolExternalLibraryMapping", m_symExternMappingMetadata, true);
 
 	try
 	{
