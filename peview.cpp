@@ -1444,6 +1444,9 @@ bool PEView::Init()
 				vector<Ref<TypeLibrary>> typeLibs = platform->GetTypeLibrariesByName(lowerName);
 				for (const auto& typeLib : typeLibs)
 				{
+					// Check if the type library is already added
+					if (GetTypeLibrary(typeLib->GetName()))
+						continue;
 					AddTypeLibrary(typeLib);
 
 					m_logger->LogDebug("pe: adding type library for '%s': %s (%s)", lowerName.c_str(),
@@ -2016,6 +2019,9 @@ bool PEView::Init()
 				vector<Ref<TypeLibrary>> typeLibs = platform->GetTypeLibrariesByName(lowerName);
 				for (const auto& typeLib : typeLibs)
 				{
+					// Check if the type library is already added
+					if (GetTypeLibrary(typeLib->GetName()))
+						continue;
 					AddTypeLibrary(typeLib);
 
 					m_logger->LogDebug("pe: adding type library for '%s': %s (%s)", lowerName.c_str(),
