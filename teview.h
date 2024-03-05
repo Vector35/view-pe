@@ -17,6 +17,11 @@ struct TEImageDataDirectory {
 #define EFI_TE_IMAGE_HEADER_SIZE 40
 #define EFI_TE_SECTION_HEADER_SIZE 40
 
+// EFI section header characteristics bit masks
+#define EFI_TE_MEM_EXECUTE 0x20000000
+#define EFI_TE_MEM_READ 0x40000000
+#define EFI_TE_MEM_WRITE 0x80000000
+
 // EFI_TE_IMAGE_HEADER
 struct TEImageHeader {
     uint16_t magic;
@@ -55,9 +60,7 @@ namespace BinaryNinja
         std::vector<TEImageSectionHeader> m_sections;
         bool m_relocatable = false;
         Ref<Logger> m_logger;
-        Ref<Architecture> m_arch;
         bool m_backedByDatabase;
-
         uint64_t m_imageBase;
         uint64_t m_entryPoint;
         bool m_is64;
@@ -72,6 +75,12 @@ namespace BinaryNinja
     public:
         TEView(BinaryView* data, bool parseOnly = false);
         virtual bool Init() override;
+
+    private:
+        void ReadTEImageHeader(BinaryReader& reader, struct TEImageHeader &imageHeader);
+        void ReadTEImageSectionHeaders(BinaryReader& reader, uint32_t numSections);
+        void CreateSections();
+        void AssignHeaderTypes();
     };
 
     class TEViewType: public BinaryViewType
