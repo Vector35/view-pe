@@ -18,9 +18,9 @@ struct TEImageDataDirectory {
 #define EFI_TE_SECTION_HEADER_SIZE 40
 
 // EFI section header characteristics bit masks
-#define EFI_TE_MEM_EXECUTE 0x20000000
-#define EFI_TE_MEM_READ 0x40000000
-#define EFI_TE_MEM_WRITE 0x80000000
+#define EFI_IMAGE_SCN_MEM_EXECUTE 0x20000000
+#define EFI_IMAGE_SCN_MEM_READ 0x40000000
+#define EFI_IMAGE_SCN_MEM_WRITE 0x80000000
 
 // EFI_TE_IMAGE_HEADER
 struct TEImageHeader {
@@ -28,7 +28,7 @@ struct TEImageHeader {
     uint16_t machine;
     uint8_t numberOfSections;
     uint8_t subsystem;
-    uint8_t strippedSize;
+    uint16_t strippedSize;
     uint32_t addressOfEntrypoint;
     uint32_t baseOfCode;
     uint64_t imageBase;
@@ -38,10 +38,7 @@ struct TEImageHeader {
 // EFI_IMAGE_SECTION_HEADER
 struct TEImageSectionHeader {
     std::string name; // 8 bytes
-    union {
-        uint32_t physicalAddress;
-        uint32_t virtualSize;
-    } Misc;
+    uint32_t virtualSize;
     uint32_t virtualAddress;
     uint32_t sizeOfRawData;
     uint32_t pointerToRawData;
@@ -62,8 +59,8 @@ namespace BinaryNinja
         Ref<Logger> m_logger;
         bool m_backedByDatabase;
         uint64_t m_imageBase;
+        Ref<Architecture> m_arch;
         uint64_t m_entryPoint;
-        bool m_is64;
         
     protected:
         virtual uint64_t PerformGetEntryPoint() const override;
@@ -77,8 +74,9 @@ namespace BinaryNinja
         virtual bool Init() override;
 
     private:
-        void ReadTEImageHeader(BinaryReader& reader, struct TEImageHeader &imageHeader);
+        void ReadTEImageHeader(BinaryReader& reader, struct TEImageHeader& imageHeader);
         void ReadTEImageSectionHeaders(BinaryReader& reader, uint32_t numSections);
+        void HandleUserOverrides();
         void CreateSections();
         void AssignHeaderTypes();
     };

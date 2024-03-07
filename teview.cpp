@@ -55,7 +55,7 @@ void TEView::ReadTEImageSectionHeaders(BinaryReader& reader, uint32_t numSection
     for (uint32_t i = 0; i < numSections; i++) {
         TEImageSectionHeader section;
         section.name = reader.ReadString(8);
-        section.Misc.virtualSize = reader.Read32();
+        section.virtualSize = reader.Read32();
         section.virtualAddress = reader.Read32();
         section.sizeOfRawData = reader.Read32();
         section.pointerToRawData = reader.Read32();
@@ -68,7 +68,7 @@ void TEView::ReadTEImageSectionHeaders(BinaryReader& reader, uint32_t numSection
         m_logger->LogDebug(
             "TEImageSectionHeader[%i]\n"
             "\tname: %s\n"
-            "\tMisc.virtualSize: %08x\n"
+            "\tvirtualSize: %08x\n"
             "\tvirtualAddress: %08x\n"
             "\tsizeOfRawData: %08x\n"
             "\tpointerToRawData: %08x\n"
@@ -79,7 +79,7 @@ void TEView::ReadTEImageSectionHeaders(BinaryReader& reader, uint32_t numSection
             "\tcharacteristics: %08x\n",
             i,
             section.name.c_str(),
-            section.Misc.virtualSize,
+            section.virtualSize,
             section.virtualAddress,
             section.sizeOfRawData,
             section.pointerToRawData,
@@ -99,24 +99,18 @@ void TEView::CreateSections()
     for (size_t i = 0; i < m_sections.size(); i++) {
         auto section = m_sections[i];
         uint32_t flags = 0;
-        if (section.characteristics & EFI_TE_MEM_WRITE)
+        if (section.characteristics & EFI_IMAGE_SCN_MEM_WRITE)
             flags |= SegmentWritable;
-        if (section.characteristics & EFI_TE_MEM_READ)
+        if (section.characteristics & EFI_IMAGE_SCN_MEM_READ)
             flags |= SegmentReadable;
-        if (section.characteristics & EFI_TE_MEM_EXECUTE)
+        if (section.characteristics & EFI_IMAGE_SCN_MEM_EXECUTE)
             flags |= SegmentExecutable;
-        if (section.characteristics & 0x80)
-            flags |= SegmentContainsData;
-        if (section.characteristics & 0x40)
-            flags |= SegmentContainsData;
-        if (section.characteristics & 0x20)
-            flags |= SegmentContainsCode;
 
         AddAutoSegment(
             section.virtualAddress + m_imageBase,
-            section.sizeOfRawData,
+            section.virtualSize,
             section.virtualAddress,
-            section.sizeOfRawData,
+            section.virtualSize,
             flags
         );
 
@@ -128,7 +122,7 @@ void TEView::CreateSections()
             semantics = ReadOnlyDataSectionSemantics;
         else if (pFlags == (SegmentReadable | SegmentWritable))
             semantics = ReadWriteDataSectionSemantics;
-        AddAutoSection(section.name, section.virtualAddress + m_imageBase, section.sizeOfRawData, semantics);
+        AddAutoSection(section.name, section.virtualAddress + m_imageBase, section.virtualSize, semantics);
     }
 }
 
@@ -160,7 +154,7 @@ void TEView::AssignHeaderTypes()
 
     StructureBuilder sectionBuilder;
     sectionBuilder.AddMember(Type::IntegerType(8, false), "Name");
-    sectionBuilder.AddMember(Type::IntegerType(4, false), "PhysicalAddress");
+    sectionBuilder.AddMember(Type::IntegerType(4, false), "VirtualSize");
     sectionBuilder.AddMember(Type::IntegerType(4, false), "VirtualAddress");
     sectionBuilder.AddMember(Type::IntegerType(4, false), "SizeOfRawData");
     sectionBuilder.AddMember(Type::IntegerType(4, false), "PointerToRawData");
@@ -197,12 +191,24 @@ TEView::TEView(BinaryView* bv, bool parseOnly) : BinaryView("TE", bv->GetFile(),
     m_backedByDatabase = bv->GetFile()->IsBackedByDatabase("TE");
 }
 
+void TEView::HandleUserOverrides()
+{
+    auto settings = GetLoadSettings(GetTypeName());
+    if (!settings)
+        return;
+
+    if (settings->Contains("loader.imageBase"))
+        m_imageBase = settings->Get<uint64_t>("loader.imageBase", this);
+
+    if (settings->Contains("loader.architecture"))
+        m_arch = Architecture::GetByName(settings->Get<string>("loader.architecture", this));
+}
+
 bool TEView::Init()
 {
     BinaryReader reader(GetParentView(), LittleEndian);
     struct TEImageHeader header;
     Ref<Platform> platform;
-    Ref<Architecture> arch;
 
     try
     {
@@ -210,63 +216,53 @@ bool TEView::Init()
         ReadTEImageHeader(reader, header);
         ReadTEImageSectionHeaders(reader, header.numberOfSections);
 
-        // Save offset so we can make a read-only segment over the headers
-        uint64_t headerSegmentSize = reader.GetOffset();
-
-        // TODO rework how we handle user overrides and derive platform / arch
-
-        // Handle user overrides
-        auto settings = GetLoadSettings(GetTypeName());
-        if (settings && settings->Contains("loader.imageBase") && settings->Contains("loader.architecture"))
+        // Set architecture and platform
+        HandleUserOverrides();
+        if (m_arch)
         {
-            m_imageBase = settings->Get<uint64_t>("loader.imageBase", this);
-            arch = Architecture::GetByName(settings->Get<string>("loader.architecture", this));
-        } else {
-            m_imageBase = header.imageBase;
+            auto archName = m_arch->GetName();
+            if (archName == "x86")
+                platform = Platform::GetByName("efi-pei-x86");
+            if (archName == "x86_64")
+                platform = Platform::GetByName("efi-pei-x86_64");
+            if (archName == "aarch64")
+                platform = Platform::GetByName("efi-pei-aarch64");
+
+            if (!platform)
+            {
+                m_logger->LogError("TE architecture '%s' is not supported", archName.c_str());
+                return false;
+            }
         }
-
-        // Attempt to identify platform from metadata
-		map<string, Ref<Metadata>> metadataMap = {
-			{"Machine",               new Metadata((uint64_t) header.machine)},
-			{"Subsystem",             new Metadata((uint64_t) header.subsystem)},
-		};
-		Ref<Metadata> metadata = new Metadata(metadataMap);
-		platform = g_teViewType->RecognizePlatform(header.machine, LittleEndian, GetParentView(), metadata);
-        if (platform && !arch)
-            arch = platform->GetArchitecture();
-
-        if (!arch)
+        else
         {
+            // Adjusted image base after objcopy and applying new TE header
+            m_imageBase = header.imageBase + header.strippedSize - EFI_TE_IMAGE_HEADER_SIZE;
+            m_logger->LogDebug("TE adjusted image base: %08x\n", m_imageBase);
             switch (header.machine)
             {
             case IMAGE_FILE_MACHINE_I386:
                 platform = Platform::GetByName("efi-pei-x86");
-                m_is64 = false;
                 break;
             case IMAGE_FILE_MACHINE_AMD64:
-                platform = Platform::GetByName("x86_64");
-                m_is64 = true;
+                platform = Platform::GetByName("efi-pei-x86_64");
                 break;
             case IMAGE_FILE_MACHINE_ARM64:
-                platform = Platform::GetByName("aarch64");
-                m_is64 = true;
+                platform = Platform::GetByName("efi-pei-aarch64");
                 break;
             default:
                 LogError("TE architecture '0x%x' is not supported", header.machine);
                 return false;
             }
 
-            arch = platform->GetArchitecture();
-        }
-        else
-        {
-            platform = arch->GetStandalonePlatform();
+            m_arch = platform->GetArchitecture();
         }
 
 		SetDefaultPlatform(platform);
-		SetDefaultArchitecture(arch);
+		SetDefaultArchitecture(m_arch);
 
         // Create a segment for the header so that it can be viewed and create sections
+        uint64_t headerSegmentSize = reader.GetOffset();
         AddAutoSegment(m_imageBase, headerSegmentSize, 0, headerSegmentSize, SegmentReadable);
         CreateSections();
         AssignHeaderTypes();
@@ -275,9 +271,8 @@ bool TEView::Init()
         if (m_parseOnly)
             return true;
 
-        m_entryPoint = header.imageBase + header.addressOfEntrypoint;
+        m_entryPoint = m_imageBase + header.addressOfEntrypoint;
 		DefineAutoSymbol(new Symbol(FunctionSymbol, "ModuleEntryPoint", m_entryPoint));
-        // TODO: apply prototype
         AddEntryPointForAnalysis(platform, m_entryPoint);
     }
     catch (std::exception& e)
@@ -296,7 +291,7 @@ uint64_t TEView::PerformGetEntryPoint() const
 
 size_t TEView::PerformGetAddressSize() const
 {
-	return m_is64 ? 8 : 4;
+    return m_arch->GetAddressSize();
 }
 
 TEViewType::TEViewType() : BinaryViewType("TE", "TE")
@@ -332,16 +327,21 @@ Ref<BinaryView> TEViewType::Parse(BinaryView* bv)
 
 bool TEViewType::IsTypeValidForData(BinaryView* bv)
 {
+    // Check the VZ signature
     DataBuffer sig = bv->ReadBuffer(0, 2);
     if (sig.GetLength() != 2)
         return false;
-
-    // Check the VZ signature
     if (memcmp(sig.GetData(), "VZ", 2))
         return false;
 
-    // TODO: more validation
+    // Read number of sections
+	BinaryReader reader(bv, LittleEndian);
+    reader.Seek(0x4);
+    uint8_t numSections;
+    if (!reader.TryRead8(numSections))
+        return false;
 
+    // TODO: analyze the section headers for more validation
     return true;
 }
 
@@ -356,10 +356,7 @@ Ref<Settings> TEViewType::GetLoadSettingsForData(BinaryView *bv)
 	Ref<Settings> settings = GetDefaultLoadSettingsForData(viewRef);
 
 	// specify default load settings that can be overridden
-	vector<string> overrides = {"loader.architecture", "loader.imageBase", "loader.platform"};
-	if (!viewRef->IsRelocatable())
-		settings->UpdateProperty("loader.imageBase", "message", "Note: File indicates image is not relocatable.");
-
+	vector<string> overrides = {"loader.architecture", "loader.imageBase"};
 	for (const auto& override : overrides)
 	{
 		if (settings->Contains(override))
